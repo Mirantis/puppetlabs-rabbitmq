@@ -30,6 +30,8 @@ class rabbitmq::server(
   $service_ensure = 'running',
   $config_stomp = false,
   $stomp_port = '6163',
+  $config_cluster = false,
+  $cluster_disk_nodes = [],
   $node_ip_address = 'UNSET',
   $config='UNSET',
   $env_config='UNSET'
@@ -58,6 +60,7 @@ class rabbitmq::server(
   }
 
   $plugin_dir = "/usr/lib/rabbitmq/lib/rabbitmq_server-${version_real}/plugins"
+  $erlang_cookie_content = 'EOKOWXQREETZSHFNTPEY'
 
   package { $package_name:
     ensure => $pkg_ensure_real,
@@ -80,7 +83,7 @@ class rabbitmq::server(
     group   => '0',
     mode    => '0644',
     notify  => Class['rabbitmq::service'],
-    require => Package[$package_name]
+    require => File['erlang_cookie']
   }
 
   file { 'rabbitmq-env.config':
@@ -96,6 +99,22 @@ class rabbitmq::server(
   class { 'rabbitmq::service':
     service_name => $service_name,
     ensure       => $service_ensure,
+  }
+
+  exec { 'rabbitmq_stop':
+    command => '/etc/init.d/rabbitmq-server stop; /bin/rm -rf /var/lib/rabbitmq/mnesia',
+    require => Package[$package_name],
+    unless  => "/bin/grep -qx ${erlang_cookie_content} /var/lib/rabbitmq/.erlang.cookie"
+  }
+
+  file { 'erlang_cookie':
+    path =>"/var/lib/rabbitmq/.erlang.cookie",
+    owner   => rabbitmq,
+    group   => rabbitmq,
+    mode    => '0400',
+    content => $erlang_cookie_content,
+    replace => true,
+    require => Exec['rabbitmq_stop'],
   }
 
   if $delete_guest_user {
